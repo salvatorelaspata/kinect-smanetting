@@ -89,3 +89,9 @@ Compile the python library
 ```bash
 python setup.py build_ext --inplace
 ```
+
+Simple test file
+
+```bash
+python test.py
+```
