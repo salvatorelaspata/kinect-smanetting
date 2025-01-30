@@ -30,3 +30,7 @@ _ReSharper*/
 [Tt]est[Rr]esult*
 build
 /results/
+
+libfreenect/
+kinect_api/venv/
+kinect_api/__pycache__/

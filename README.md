@@ -95,3 +95,44 @@ Simple test file
 ```bash
 python test.py
 ```
+
+## Flask api
+
+> Note: To use this api you need copy the folder `libfreenect/wrappers/python/*`into `kinect_api/*`
+> Note: Before running the server, the wrapper must be built as illustrated in the python library paragraph (#python-library)
+
+The API is a simple Flask server that returns the depth image of the Kinect. The folder `kinect_api` contains the server.
+
+Navigate to the folder
+
+```bash
+cd kinect_api
+```
+
+Create a virtual environment (optional if exists)
+
+```bash
+python3 -m venv venv
+```
+
+Activate the virtual environment
+
+```bash
+source venv/bin/activate
+```
+
+Install the dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+Run the server
+
+```bash
+python app.py
+```
+
+### API
+
+. . .
