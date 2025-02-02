@@ -1,4 +1,4 @@
-import api
+import api.api as api
 import open3d as o3d
 
 # Ottieni i dati in metri

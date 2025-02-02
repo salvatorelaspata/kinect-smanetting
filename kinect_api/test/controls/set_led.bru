@@ -5,13 +5,13 @@ meta {
 }
 
 post {
-  url: http://localhost:5003/set_led
+  url: {{host_api}}/set_led
   body: json
   auth: none
 }
 
 body:json {
   {
-    "option": "OFF"
+    "option": "GREEN"
   }
 }

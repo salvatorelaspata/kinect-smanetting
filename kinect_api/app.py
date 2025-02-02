@@ -1,7 +1,8 @@
-from flask import Flask, jsonify, Response, request
+from flask import Flask, jsonify, Response, request, Blueprint
+from flask_cors import CORS
 
-import api
-from kinect_controls import (
+import api.api as api
+from api.kinect_controls import (
     set_tilt_angle,
     set_led_state,
     get_kinect_status,
@@ -16,6 +17,7 @@ from flask import send_file
 import tempfile
 
 app = Flask(__name__)
+CORS(app)  # Abilita CORS per tutte le rotte
 
 
 @app.route("/")
@@ -24,38 +26,41 @@ def hello():
     return """
     <h1>API Kinect</h1>
     <ul>
-        <li><a href="/depth">[IMAGE] Depth</a></li>
-        <li><a href="/rgb">[IMAGE] RGB</a></li>
-        <li><a href="/video/depth">[VIDEO] Depth</a></li>
-        <li><a href="/video/rgb">[VIDEO] RGB</a></li>
-        <li><a href="/health">[GET] Health</a></li>
-        <li><a href="/raw_depth">[GET] Raw Depth</a></li>
-        <li><a href="/raw_depth_image">[IMAGE] Raw Depth</a></li>
-        <li><a href="/depth_meters">[GET] Depth in meters</a></li>
-        <li><a href="/download_ply">[GET] Download PLY</a></li>
-        <li><a href="/set_tilt">[POST] Set tilt</a></li>
-        <li><a href="/set_led">[POST] Set LED</a></li>
-        <li><a href="/get_status">[GET] Get status</a></li>
+        <li><a href="/api/depth">[IMAGE] Depth</a></li>
+        <li><a href="/api/rgb">[IMAGE] RGB</a></li>
+        <li><a href="/api/video/depth">[VIDEO] Depth</a></li>
+        <li><a href="/api/video/rgb">[VIDEO] RGB</a></li>
+        <li><a href="/api/health">[GET] Health</a></li>
+        <li><a href="/api/raw_depth">[GET] Raw Depth</a></li>
+        <li><a href="/api/raw_depth_image">[IMAGE] Raw Depth</a></li>
+        <li><a href="/api/depth_meters">[GET] Depth in meters</a></li>
+        <li><a href="/api/download_ply">[GET] Download PLY</a></li>
+        <li><a href="/api/set_tilt">[POST] Set tilt</a></li>
+        <li><a href="/api/set_led">[POST] Set LED</a></li>
+        <li><a href="/api/get_status">[GET] Get status</a></li>
     </ul>
     """
 
 
+api_blueprint = Blueprint("api", __name__)
+
+
 # Rotta che restituisce l'immagine rgb
-@app.route("/rgb")
+@api_blueprint.route("/rgb")
 def rgb():
     rgb = api.get_rgb()
     return cv2.imencode(".png", rgb)[1].tobytes(), 200, {"Content-Type": "image/png"}
 
 
 # Rotta che restituisce l'immagine depth
-@app.route("/depth")
+@api_blueprint.route("/depth")
 def demo():
     depth = api.get_depth()
     return cv2.imencode(".png", depth)[1].tobytes(), 200, {"Content-Type": "image/png"}
 
 
 # Rotta che restituisce uno streaming video
-@app.route("/video/rgb")
+@api_blueprint.route("/video/rgb")
 def video_rgb():
     return Response(
         generate_video_frames("rgb"),
@@ -63,7 +68,7 @@ def video_rgb():
     )
 
 
-@app.route("/video/depth")
+@api_blueprint.route("/video/depth")
 def video_depth():
     return Response(
         generate_video_frames("depth"),
@@ -89,18 +94,18 @@ def generate_video_frames(type):
         )
 
 
-@app.route("/health")
+@api_blueprint.route("/health")
 def health():
     return jsonify({"status": "OK"})
 
 
-@app.route("/raw_depth")
+@api_blueprint.route("/raw_depth")
 def raw_depth():
     depth = api.get_raw_depth()
     return jsonify({"depth_array": depth.tolist(), "shape": depth.shape})
 
 
-@app.route("/raw_depth_image")
+@api_blueprint.route("/raw_depth_image")
 def raw_depth_image():
     depth_raw = api.get_raw_depth()
     # Normalizza a 0-255 e converti in uint8
@@ -111,7 +116,7 @@ def raw_depth_image():
     return Response(buffer.tobytes(), mimetype="image/png")
 
 
-@app.route("/depth_meters")
+@api_blueprint.route("/depth_meters")
 def depth_meters():
     depth_data = api.get_depth_in_meters()
     return jsonify(
@@ -155,7 +160,7 @@ def generate_ply():
     return ply_data
 
 
-@app.route("/download_ply")
+@api_blueprint.route("/download_ply")
 def download_ply():
     ply_data = generate_ply()
     if ply_data is None:
@@ -169,31 +174,34 @@ def download_ply():
 
 
 # kinect_controls.py
-@app.route("/get_tilt_angle")
+@api_blueprint.route("/get_tilt_angle")
 def handle_get_tilt_angle():
     return get_tilt_angle()
 
 
-@app.route("/set_tilt", methods=["POST"])
+@api_blueprint.route("/set_tilt", methods=["POST"])
 def handle_set_tilt():
     angle = request.json.get("angle")
     return set_tilt_angle(angle)
 
 
-@app.route("/get_led_state")
+@api_blueprint.route("/get_led_state")
 def handle_get_led_state():
     return get_led_state()
 
 
-@app.route("/set_led", methods=["POST"])
+@api_blueprint.route("/set_led", methods=["POST"])
 def handle_set_led():
     option = request.json.get("option")
     return set_led_state(option)
 
 
-@app.route("/get_status")
+@api_blueprint.route("/get_status")
 def handle_get_status():
     return get_kinect_status()
+
+
+app.register_blueprint(api_blueprint, url_prefix="/api")
 
 
 if __name__ == "__main__":

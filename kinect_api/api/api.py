@@ -1,6 +1,7 @@
 import freenect
 import cv2
 import numpy as np
+import lib.cv2_sync as cv2_sync
 
 
 def get_depth_in_meters():
@@ -23,33 +24,32 @@ def get_raw_depth():
 
 # Funzione per ottenere l'immagine rgb
 def get_rgb():
-    rgb, _ = freenect.sync_get_video()
-    rgb = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+    print("Getting RGB")
+    rgb = cv2_sync.get_video()
+    print("Got RGB")
     return rgb
 
 
 # Funzione per ottenere i dati di profondità
 def get_depth():
-    depth, _ = freenect.sync_get_depth()
-    depth = depth.astype(np.uint8)
-    depth = cv2.cvtColor(depth, cv2.COLOR_GRAY2BGR)
+    depth = cv2_sync.get_depth()
     return depth
 
 
 # Funzione per ottenere i dati video
-def get_video_rgb():
+def get_video_rgb(color_map=cv2.COLOR_RGB2BGR):
     # Modifica per ottenere continuamente nuovi frame
-    video, _ = freenect.sync_get_video()
-    video = cv2.cvtColor(video, cv2.COLOR_RGB2BGR)
+    video = cv2_sync.get_video()
+    video = cv2.cvtColor(video, color_map)
     return video
 
 
 # Funzione per ottenere i dati video depth
-def get_video_depth():
+def get_video_depth(color_map=cv2.COLORMAP_JET):
     # Modifica per ottenere continuamente nuovi frame
-    video, _ = freenect.sync_get_depth()
-    video = video.astype(np.uint8)
-    # video = cv2.cvtColor(video, cv2.COLOR_GRAY2BGR)
-    # colora i pixel in base alla profondità (dal rosso al blu)
-    video = cv2.applyColorMap(video, cv2.COLORMAP_JET)
+    # video, _ = freenect.sync_get_depth()
+    # video = video.astype(np.uint8)
+    # video = cv2.applyColorMap(video, cv2.COLORMAP_JET)
+    video = cv2_sync.get_depth()
+    video = cv2.applyColorMap(video, color_map)
     return video

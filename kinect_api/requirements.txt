@@ -1,4 +1,5 @@
-open3d
 Flask
+flask-cors
+open3d
 numpy
 opencv-python
