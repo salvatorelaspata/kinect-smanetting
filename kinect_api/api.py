@@ -3,6 +3,24 @@ import cv2
 import numpy as np
 
 
+def get_depth_in_meters():
+    try:
+        depth_data = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
+        if depth_data is None:
+            raise ValueError("Kinect non rilevato o dati non disponibili")
+        depth_raw = depth_data[0]
+        depth_meters = 1.0 / (depth_raw * -0.0030711016 + 3.3309495161)
+        return depth_meters
+    except Exception as e:
+        print(f"Errore nell'acquisizione depth: {e}")
+        return None
+
+
+def get_raw_depth():
+    depth, _ = freenect.sync_get_depth(format=freenect.DEPTH_11BIT)
+    return depth  # Array numpy a 16-bit (valori 0-2047)
+
+
 # Funzione per ottenere l'immagine rgb
 def get_rgb():
     rgb, _ = freenect.sync_get_video()
