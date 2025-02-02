@@ -83,7 +83,6 @@ Regenerate the cython file freenect.c
 cython freenect.pyx
 ```
 
-
 Compile the python library
 
 ```bash

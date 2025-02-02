@@ -1,6 +1,13 @@
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, Response, request
 
 import api
+from kinect_controls import (
+    set_tilt_angle,
+    set_led_state,
+    get_kinect_status,
+    get_tilt_angle,
+    get_led_state,
+)
 import cv2
 import numpy as np
 import open3d as o3d
@@ -26,15 +33,11 @@ def hello():
         <li><a href="/raw_depth_image">[IMAGE] Raw Depth</a></li>
         <li><a href="/depth_meters">[GET] Depth in meters</a></li>
         <li><a href="/download_ply">[GET] Download PLY</a></li>
+        <li><a href="/set_tilt">[POST] Set tilt</a></li>
+        <li><a href="/set_led">[POST] Set LED</a></li>
+        <li><a href="/get_status">[GET] Get status</a></li>
     </ul>
     """
-
-
-# Rotta che restituisce l'immagine depth
-@app.route("/depth")
-def demo():
-    depth = api.get_depth()
-    return cv2.imencode(".png", depth)[1].tobytes(), 200, {"Content-Type": "image/png"}
 
 
 # Rotta che restituisce l'immagine rgb
@@ -42,6 +45,13 @@ def demo():
 def rgb():
     rgb = api.get_rgb()
     return cv2.imencode(".png", rgb)[1].tobytes(), 200, {"Content-Type": "image/png"}
+
+
+# Rotta che restituisce l'immagine depth
+@app.route("/depth")
+def demo():
+    depth = api.get_depth()
+    return cv2.imencode(".png", depth)[1].tobytes(), 200, {"Content-Type": "image/png"}
 
 
 # Rotta che restituisce uno streaming video
@@ -156,6 +166,34 @@ def download_ply():
         mimetype="application/octet-stream",
         headers={"Content-Disposition": "attachment;filename=scan.ply"},
     )
+
+
+# kinect_controls.py
+@app.route("/get_tilt_angle")
+def handle_get_tilt_angle():
+    return get_tilt_angle()
+
+
+@app.route("/set_tilt", methods=["POST"])
+def handle_set_tilt():
+    angle = request.json.get("angle")
+    return set_tilt_angle(angle)
+
+
+@app.route("/get_led_state")
+def handle_get_led_state():
+    return get_led_state()
+
+
+@app.route("/set_led", methods=["POST"])
+def handle_set_led():
+    option = request.json.get("option")
+    return set_led_state(option)
+
+
+@app.route("/get_status")
+def handle_get_status():
+    return get_kinect_status()
 
 
 if __name__ == "__main__":

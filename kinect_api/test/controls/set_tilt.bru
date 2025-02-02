@@ -1,0 +1,17 @@
+meta {
+  name: set_tilt
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:5003/set_tilt
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "angle": 10
+  }
+}

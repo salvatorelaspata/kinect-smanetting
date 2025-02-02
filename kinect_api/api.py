@@ -50,4 +50,6 @@ def get_video_depth():
     video, _ = freenect.sync_get_depth()
     video = video.astype(np.uint8)
     # video = cv2.cvtColor(video, cv2.COLOR_GRAY2BGR)
+    # colora i pixel in base alla profondità (dal rosso al blu)
+    video = cv2.applyColorMap(video, cv2.COLORMAP_JET)
     return video
