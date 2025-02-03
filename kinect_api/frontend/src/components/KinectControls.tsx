@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Sliders, Power } from "lucide-react";
 import { globalStatusType } from "../App";
 // import { KinectStatus } from "../App";
@@ -29,20 +29,21 @@ const KinectControls: React.FC<KinectControlsProps> = ({
     { value: "BLINK_RED_YELLOW", label: "Blink Red-Yellow" },
   ];
 
-  const handleTiltChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const newAngle = parseInt(event.target.value);
+  const handleTiltChange = async (angle: number) => {
+    const newAngle = angle;
+    if (newAngle === tiltAngle) return;
+    await applyTilt();
     setTiltAngle(newAngle);
   };
 
   const applyTilt = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:5003/api/set_tilt", {
+      const response = await fetch(`http://localhost:5003/tilt`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
         },
         body: JSON.stringify({ angle: tiltAngle }),
       });
@@ -64,13 +65,12 @@ const KinectControls: React.FC<KinectControlsProps> = ({
   ) => {
     setIsLoading(true);
     try {
-      const response = await fetch("http://localhost:5003/api/set_led", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ option: event.target.value }),
-      });
+      const response = await fetch(
+        `http://localhost:5003/led/${event.target.value}`,
+        {
+          method: "POST",
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to set LED state");
 
@@ -84,6 +84,22 @@ const KinectControls: React.FC<KinectControlsProps> = ({
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch("http://localhost:5003/status");
+        const data = await response.json();
+        setTiltAngle(data.tilt_angle);
+        setGlobalStatus(data.connected ? "OK" : "DISCONNECTED");
+      } catch (err) {
+        setGlobalStatus("ERROR");
+      }
+    };
+    fetchStatus();
+    // const interval = setInterval(fetchStatus, 10000);
+    // return () => clearInterval(interval);
+  }, [setGlobalStatus]);
 
   if (isLoading) {
     return (
@@ -136,23 +152,20 @@ const KinectControls: React.FC<KinectControlsProps> = ({
             Tilt Angle ({tiltAngle}°)
           </label>
           <div className="flex gap-2">
-            <input
-              type="range"
-              min="-27"
-              max="27"
-              value={tiltAngle}
-              onChange={handleTiltChange}
-              onMouseUp={applyTilt}
-              onTouchEnd={applyTilt}
-              className="flex-1"
-            />
-            <button
-              onClick={applyTilt}
-              disabled={isLoading}
-              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50"
-            >
-              Apply
-            </button>
+            {/* create -30, -20 ... 20, 30 */}
+            {Array.from({ length: 13 }, (_, i) => i - 6).map((angle) => (
+              <button
+                key={angle * 5}
+                onClick={() => handleTiltChange(angle * 5)}
+                className={`px-3 py-2 rounded-md border ${
+                  tiltAngle === angle * 5
+                    ? "bg-blue-500 text-white"
+                    : "bg-white text-gray-700"
+                }`}
+              >
+                {angle * 5}
+              </button>
+            ))}
           </div>
         </div>
 

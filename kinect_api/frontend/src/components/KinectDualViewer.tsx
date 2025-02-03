@@ -30,7 +30,9 @@ const StreamView: React.FC<StreamViewProps> = ({
         </span>
       </div>
       <img
-        src={`http://localhost:5003/api/video/${streamType}`}
+        src={`http://localhost:5003/${
+          streamType === "rgb" ? "video" : "depth"
+        }`}
         width={width}
         height={height}
         className="w-full h-full object-cover"

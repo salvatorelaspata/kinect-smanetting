@@ -1,208 +1,158 @@
-from flask import Flask, jsonify, Response, request, Blueprint
+#!/usr/bin/env python
+from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
-
-import api.api as api
-from api.kinect_controls import (
-    set_tilt_angle,
-    set_led_state,
-    get_kinect_status,
-    get_tilt_angle,
-    get_led_state,
-)
+import threading
+import freenect
+import lib.frame_convert2 as frame_convert2
 import cv2
-import numpy as np
-import open3d as o3d
-from io import BytesIO
-from flask import send_file
-import tempfile
+import time
 
 app = Flask(__name__)
-CORS(app)  # Abilita CORS per tutte le rotte
+CORS(app)
 
 
-@app.route("/")
-def hello():
-    # create link to all routes
-    return """
-    <h1>API Kinect</h1>
-    <ul>
-        <li><a href="/api/depth">[IMAGE] Depth</a></li>
-        <li><a href="/api/rgb">[IMAGE] RGB</a></li>
-        <li><a href="/api/video/depth">[VIDEO] Depth</a></li>
-        <li><a href="/api/video/rgb">[VIDEO] RGB</a></li>
-        <li><a href="/api/health">[GET] Health</a></li>
-        <li><a href="/api/raw_depth">[GET] Raw Depth</a></li>
-        <li><a href="/api/raw_depth_image">[IMAGE] Raw Depth</a></li>
-        <li><a href="/api/depth_meters">[GET] Depth in meters</a></li>
-        <li><a href="/api/download_ply">[GET] Download PLY</a></li>
-        <li><a href="/api/set_tilt">[POST] Set tilt</a></li>
-        <li><a href="/api/set_led">[POST] Set LED</a></li>
-        <li><a href="/api/get_status">[GET] Get status</a></li>
-    </ul>
-    """
+class KinectDevice:
+    def __init__(self):
+        self.ctx = None
+        self.dev = None
+        self.tilt_angle = 0
+        self.running = False
+        self.video_frame = None
+        self.depth_frame = None
+        self.lock = threading.Lock()
+
+    def init_kinect(self):
+        try:
+            self.ctx = freenect.init()
+            self.dev = freenect.open_device(self.ctx, 0)
+
+            freenect.set_video_callback(self.dev, self.video_callback)
+            freenect.set_depth_callback(self.dev, self.depth_callback)
+            # freenect.set_video_mode(self.dev, freenect.VIDEO_RGB)
+            # freenect.set_depth_mode(self.dev, freenect.DEPTH_11BIT)
+
+            freenect.start_video(self.dev)
+            freenect.start_depth(self.dev)
+            self.running = True
+            return True
+        except Exception as e:
+            print(f"Init error: {str(e)}")
+            return False
+
+    def video_callback(self, dev, data, timestamp):
+        with self.lock:
+            self.video_frame = frame_convert2.video_cv(data)
+
+    def depth_callback(self, dev, data, timestamp):
+        with self.lock:
+            self.depth_frame = frame_convert2.pretty_depth_cv(data)
+
+    def process_events(self):
+        while self.running:
+            freenect.process_events(self.ctx)
+            time.sleep(0.01)
+
+    def shutdown(self):
+        self.running = False
+        if self.dev:
+            freenect.stop_video(self.dev)
+            freenect.stop_depth(self.dev)
+            freenect.close_device(self.dev)
+        if self.ctx:
+            freenect.shutdown(self.ctx)
 
 
-api_blueprint = Blueprint("api", __name__)
+kinect = KinectDevice()
 
 
-# Rotta che restituisce l'immagine rgb
-@api_blueprint.route("/rgb")
-def rgb():
-    rgb = api.get_rgb()
-    return cv2.imencode(".png", rgb)[1].tobytes(), 200, {"Content-Type": "image/png"}
+# Endpoint API
+@app.route("/video")
+def video_stream():
+    def generate():
+        while True:
+            with kinect.lock:
+                if kinect.video_frame is not None:
+                    ret, jpeg = cv2.imencode(".jpg", kinect.video_frame)
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n"
+                        + jpeg.tobytes()
+                        + b"\r\n\r\n"
+                    )
+                time.sleep(0.03)
+
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
-# Rotta che restituisce l'immagine depth
-@api_blueprint.route("/depth")
-def demo():
-    depth = api.get_depth()
-    return cv2.imencode(".png", depth)[1].tobytes(), 200, {"Content-Type": "image/png"}
+@app.route("/depth")
+def depth_stream():
+    def generate():
+        while True:
+            with kinect.lock:
+                if kinect.depth_frame is not None:
+                    ret, jpeg = cv2.imencode(".jpg", kinect.depth_frame)
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n"
+                        + jpeg.tobytes()
+                        + b"\r\n\r\n"
+                    )
+                time.sleep(0.03)
+
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
-# Rotta che restituisce uno streaming video
-@api_blueprint.route("/video/rgb")
-def video_rgb():
-    return Response(
-        generate_video_frames("rgb"),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
+@app.route("/led/<state>", methods=["POST"])
+def set_led(state):
+    states = {
+        "OFF": freenect.LED_OFF,
+        "GREEN": freenect.LED_GREEN,
+        "RED": freenect.LED_RED,
+        "YELLOW": freenect.LED_YELLOW,
+        "BLINK_GREEN": freenect.LED_BLINK_GREEN,
+        "BLINK_RED_YELLOW": freenect.LED_BLINK_RED_YELLOW,
+    }
+    if state in states and kinect.dev:
+        freenect.set_led(kinect.dev, states[state])
+        return jsonify(status="success")
+    return jsonify(status="invalid command"), 400
 
 
-@api_blueprint.route("/video/depth")
-def video_depth():
-    return Response(
-        generate_video_frames("depth"),
-        mimetype="multipart/x-mixed-replace; boundary=frame",
-    )
+# Rotta che permette di settare l'angolo di inclinazione del Kinect
+# riceve nel body un json con il campo "angle" che rappresenta l'angolo di inclinazione
+@app.route("/tilt", methods=["POST"])
+def set_tilt():
+    body = request.json
+    angle = body.get("angle")
+    if kinect.dev and -30 <= angle <= 30:
+        freenect.set_tilt_degs(kinect.dev, angle)
+        kinect.tilt_angle = angle
+        return jsonify(status="success", angle=angle)
+    return jsonify(status="invalid angle"), 400
 
 
-def generate_video_frames(type):
-    print("Generating video frames")
-    print(type)
-    while True:
-        if type == "rgb":
-            frame = api.get_video_rgb()
-        elif type == "depth":
-            frame = api.get_video_depth()
-        else:
-            break
-        # Converti il frame in JPEG invece di PNG per performance
-        ret, buffer = cv2.imencode(".jpg", frame)
-        frame_bytes = buffer.tobytes()
-        yield (
-            b"--frame\r\n" b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
-        )
-
-
-@api_blueprint.route("/health")
-def health():
-    return jsonify({"status": "OK"})
-
-
-@api_blueprint.route("/raw_depth")
-def raw_depth():
-    depth = api.get_raw_depth()
-    return jsonify({"depth_array": depth.tolist(), "shape": depth.shape})
-
-
-@api_blueprint.route("/raw_depth_image")
-def raw_depth_image():
-    depth_raw = api.get_raw_depth()
-    # Normalizza a 0-255 e converti in uint8
-    depth_normalized = cv2.normalize(
-        depth_raw, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U
-    )
-    _, buffer = cv2.imencode(".png", depth_normalized)
-    return Response(buffer.tobytes(), mimetype="image/png")
-
-
-@api_blueprint.route("/depth_meters")
-def depth_meters():
-    depth_data = api.get_depth_in_meters()
+@app.route("/status")
+def get_status():
     return jsonify(
-        {
-            "depth_array_sample": depth_data[
-                :5, :5
-            ].tolist(),  # Esempio di una porzione 5x5
-            "min_distance": np.min(depth_data),
-            "max_distance": np.max(depth_data),
-            "shape": depth_data.shape,
-        }
+        connected=kinect.dev is not None,
+        tilt_angle=kinect.tilt_angle,
+        resolution="640x480",
     )
-
-
-def generate_ply():
-    depth_data = api.get_raw_depth()
-    if depth_data is None:
-        return None
-
-    # Converti a metri e genera punti 3D
-    depth_meters = 1.0 / (depth_data * -0.0030711016 + 3.3309495161)
-    fx, fy, cx, cy = 525, 525, 319.5, 239.5  # Sostituisci con valori calibrati
-
-    u, v = np.meshgrid(np.arange(640), np.arange(480))
-    Z = depth_meters
-    X = (u - cx) * Z / fx
-    Y = (v - cy) * Z / fy
-
-    mask = (Z > 0.3) & (Z < 4.0)  # Filtra rumore e outliers
-    points = np.stack([X[mask], Y[mask], Z[mask]], axis=-1)
-
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-
-    # Salva in un file temporaneo
-    with tempfile.NamedTemporaryFile(suffix=".ply") as tmp:
-        o3d.io.write_point_cloud(tmp.name, pcd)
-        tmp.seek(0)
-        ply_data = tmp.read()
-
-    return ply_data
-
-
-@api_blueprint.route("/download_ply")
-def download_ply():
-    ply_data = generate_ply()
-    if ply_data is None:
-        return jsonify({"error": "Acquisizione fallita"}), 500
-
-    return Response(
-        ply_data,
-        mimetype="application/octet-stream",
-        headers={"Content-Disposition": "attachment;filename=scan.ply"},
-    )
-
-
-# kinect_controls.py
-@api_blueprint.route("/get_tilt_angle")
-def handle_get_tilt_angle():
-    return get_tilt_angle()
-
-
-@api_blueprint.route("/set_tilt", methods=["POST"])
-def handle_set_tilt():
-    angle = request.json.get("angle")
-    return set_tilt_angle(angle)
-
-
-@api_blueprint.route("/get_led_state")
-def handle_get_led_state():
-    return get_led_state()
-
-
-@api_blueprint.route("/set_led", methods=["POST"])
-def handle_set_led():
-    option = request.json.get("option")
-    return set_led_state(option)
-
-
-@api_blueprint.route("/get_status")
-def handle_get_status():
-    return get_kinect_status()
-
-
-app.register_blueprint(api_blueprint, url_prefix="/api")
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5003)
+    if kinect.init_kinect():
+        try:
+            thread = threading.Thread(target=kinect.process_events)
+            thread.start()
+            app.run(
+                host="0.0.0.0",
+                port=5003,
+                threaded=True,
+                use_reloader=False,  # Importante per evitare doppia inizializzazione
+                use_debugger=False,  # Necessario per il corretto funzionamento dello streaming
+            )
+        finally:
+            kinect.shutdown()
+    else:
+        print("Failed to initialize Kinect")
