@@ -11,7 +11,7 @@ def get_tilt_angle():
         tilt_state = freenect.get_tilt_state(dev)
         tilt_degrees = freenect.get_tilt_degs(tilt_state)
 
-        freenect.close_device(dev)
+        # freenect.close_device(dev)
         return jsonify({"status": "OK", "angle": tilt_degrees})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -25,8 +25,9 @@ def set_tilt_angle(angle):
             raise ValueError(
                 "L'angolo di inclinazione deve essere compreso tra -30 e 30 gradi"
             )
-
+        # freenect.stop_video(dev)  # Stop video stream
         freenect.set_tilt_degs(dev, float(angle))
+        # freenect.start_video(dev)  # Restart video stream
         freenect.close_device(dev)
         # close device
         return jsonify({"status": "OK", "angle": angle})
@@ -50,7 +51,6 @@ def get_led_state():
     #         freenect.LED_BLINK_RED_YELLOW: "BLINK_RED_YELLOW",
     #     }
     #     led = led_options.get(led_state, "UNKNOWN")
-
     #     freenect.close_device(dev)
     #     return jsonify({"status": "OK", "led": led})
     # except Exception as e:
@@ -72,13 +72,15 @@ def set_led_state(option):
         if option not in options:
             raise ValueError(f"Opzione LED non valida: {option}")
 
+        # freenect.stop_video(dev)  # Stop video stream
         freenect.set_led(
             dev,
             options.get(option, freenect.LED_OFF),
         )
+        # freenect.start_video(dev)  # Restart video stream
 
         # close device
-        freenect.close_device(dev)
+        # freenect.close_device(dev)
         return jsonify({"status": "OK", "led": option})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -89,6 +91,7 @@ def get_kinect_status():
     per farlo si esegue un test di funzionamento
     dei motori e del LED"""
     try:
+        dev = freenect.open_device(freenect.init(), 0)
         check_tilt_degs = "OK"
         # move from 0 to 30 degrees and to -30 degrees
         try:
@@ -102,15 +105,15 @@ def get_kinect_status():
             # move from 0 to 30 degrees
             for angle in range(0, 31, step):
                 print(f"ANGLE: {angle}")
-                set_tilt_angle(angle)
+                set_tilt_angle(dev, angle)
             # move from 30 to -30 degrees
             for angle in range(30, -31, -step):
                 print(f"ANGLE: {angle}")
-                set_tilt_angle(angle)
+                set_tilt_angle(dev, angle)
             # move from -30 to 0 degrees
             for angle in range(-30, 1, step):
                 print(f"ANGLE: {angle}")
-                set_tilt_angle(angle)
+                set_tilt_angle(dev, angle)
 
             print("END - Testing tilt motor")
         except Exception as e:
